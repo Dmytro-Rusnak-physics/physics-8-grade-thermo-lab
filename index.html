@@ -59,9 +59,12 @@ label{display:block;color:#c9d9ed;font-weight:650;margin:12px 0 6px}input,select
 </div>
 <script>
 const Cw=4200;
-let student='',klass='',score=0,missionScore={1:0,2:0},attempts={},completed={},records={1:[],2:[]},current=0,step=0,reportText='';
+let student='',klass='',score=0,missionScore={1:0,2:0},attempts={},completed={},records={1:[],2:[]},current=0,step=0,reportText='',sessionId='',theoryQuestionBank={},missionAnswers={1:{theoryAnswers:[],calculationAnswers:[],conclusion:'',controlAnswer:'',controlCorrect:false},2:{theoryAnswers:[],calculationAnswers:[],conclusion:'',controlAnswer:'',controlCorrect:false}},sheetsSubmissionState={};
+// Після розгортання Google Apps Script встав сюди URL вебзастосунку, що закінчується на /exec.
+const GOOGLE_SHEETS_WEB_APP_URL='';
+const createSessionId=()=> (window.crypto&&crypto.randomUUID)?crypto.randomUUID():'session-'+Date.now()+'-'+Math.random().toString(36).slice(2);
 const $=id=>document.getElementById(id);
-function begin(){student=$('student').value.trim();klass=$('className').value.trim();if(!student){alert('Введи прізвище та ім’я дослідника.');return} $('start').classList.add('hidden');$('hub').classList.remove('hidden');$('welcome').textContent=student+(klass?' · '+klass:'');updateScore()}
+function begin(){student=$('student').value.trim();klass=$('className').value.trim();if(!student){alert('Введи прізвище та ім’я дослідника.');return}sessionId=createSessionId();$('start').classList.add('hidden');$('hub').classList.remove('hidden');$('welcome').textContent=student+(klass?' · '+klass:'');updateScore()}
 function updateScore(){$('scoreNow').textContent=score+' / 24';let done=Object.keys(completed).length;$('hubProgress').style.width=(done/2*100)+'%'}
 function hideAll(){$('hub').classList.add('hidden');$('mission').classList.add('hidden');$('report').classList.add('hidden')}
 function backHub(){hideAll();$('hub').classList.remove('hidden');updateScore()}
@@ -78,10 +81,30 @@ function theory(){
  ['Яке тіло віддає теплоту в досліді з металевим кубиком і водою?',['Нагрітий металевий кубик','Холодна вода','Термометр'],0,'Нагрітий метал охолоджується та передає енергію воді.'],
  ['Яке рівняння теплового балансу використовуємо в спрощеній моделі?',['Qметалу = Qводи','Qметалу = 0','Qводи = 2Qметалу'],0,'У моделі нехтуємо теплоємністю калориметра й тепловими втратами.']
  ];
+ theoryQuestionBank[current]=q;
  $('missionContent').innerHTML='<h3>Етап 1. Перевірка знань</h3><p class="muted">Правильно відповідай на запитання, щоб розблокувати обладнання. За кожне запитання — до 1 бала.</p>'+q.map((x,i)=>questionHTML(x,i)).join('')+'<div class="actions"><button onclick="checkTheory()">Перевірити відповіді</button></div><div id="theoryFeedback"></div>';
 }
 function questionHTML(q,i){return `<div class="question"><b>${i+1}. ${q[0]}</b><div class="answers">${q[1].map((a,j)=>`<label class="answer"><input type="radio" name="q${i}" value="${j}"><span>${a}</span></label>`).join('')}</div><div id="qf${i}"></div></div>`}
-function checkTheory(){let n=current===1?3:3,correct=0,all=true;for(let i=0;i<n;i++){let sel=document.querySelector(`input[name=q${i}]:checked`);if(!sel){all=false;continue}let key=current+'t'+i;attempts[key]=(attempts[key]||0)+1;let right=sel.value==='0';if(right){correct++;$('qf'+i).innerHTML='<div class="feedback ok">Правильно! '+(current===1?['Q = cmΔt.','Потрібні маса, теплоємність і зміна температури.','Гаряча вода віддає теплоту.'][i]:['Це визначення питомої теплоємності.','Гарячий метал віддає теплоту.','Використовуємо рівняння теплового балансу.'][i])+'</div>'}else{$('qf'+i).innerHTML='<div class="feedback bad">Не зовсім. '+(attempts[key]<2?'Спробуй ще раз.':'Правильна відповідь — перший варіант.')+'</div>'}}if(!all){$('theoryFeedback').innerHTML='<p class="bad feedback">Дай відповідь на всі запитання.</p>';return}if(correct===3){if(!completed['t'+current]){score+=3;missionScore[current]+=3;completed['t'+current]=true} $('theoryFeedback').innerHTML='<p class="feedback ok">Етап пройдено! +3 бали. Обладнання розблоковано.</p><button onclick="step=1;renderStep()">До експерименту</button>'}else $('theoryFeedback').innerHTML='<p class="feedback">Правильних відповідей: '+correct+' із 3. Виправ помилки, щоб пройти далі.</p>'}
+function checkTheory(){
+ let n=3,correct=0,all=true;
+ for(let i=0;i<n;i++){
+  let sel=document.querySelector(`input[name=q${i}]:checked`);
+  if(!sel){all=false;continue}
+  let key=current+'t'+i;attempts[key]=(attempts[key]||0)+1;
+  const q=theoryQuestionBank[current][i],selectedIndex=Number(sel.value),right=selectedIndex===q[2];
+  missionAnswers[current].theoryAnswers[i]={
+   question:q[0],selectedAnswer:q[1][selectedIndex],selectedIndex,
+   correctAnswer:q[1][q[2]],isCorrect:right,attempts:attempts[key],explanation:q[3]
+  };
+  if(right){correct++;$('qf'+i).innerHTML='<div class="feedback ok">Правильно! '+(current===1?['Q = cmΔt.','Потрібні маса, теплоємність і зміна температури.','Гаряча вода віддає теплоту.'][i]:['Це визначення питомої теплоємності.','Гарячий метал віддає теплоту.','Використовуємо рівняння теплового балансу.'][i])+'</div>'}
+  else{$('qf'+i).innerHTML='<div class="feedback bad">Не зовсім. '+(attempts[key]<2?'Спробуй ще раз.':'Правильна відповідь — перший варіант.')+'</div>'}
+ }
+ if(!all){$('theoryFeedback').innerHTML='<p class="bad feedback">Дай відповідь на всі запитання.</p>';return}
+ if(correct===3){
+  if(!completed['t'+current]){score+=3;missionScore[current]+=3;completed['t'+current]=true}
+  $('theoryFeedback').innerHTML='<p class="feedback ok">Етап пройдено! +3 бали. Обладнання розблоковано.</p><button onclick="step=1;renderStep()">До експерименту</button>'
+ }else $('theoryFeedback').innerHTML='<p class="feedback">Правильних відповідей: '+correct+' із 3. Виправ помилки, щоб пройти далі.</p>'
+}
 function experiment(){
  const trial=records[current].length;
  if(trial>=3){step=2;renderStep();return}
@@ -137,14 +160,104 @@ function calculations(){
   $('missionContent').innerHTML=`<h3>Етап 3. Розкрий таємницю металів</h3><p>Для кожного досліду обчисли питому теплоємність металу. Округли результат до цілого числа. Перед підстановкою переведи маси з грамів у кілограми.</p><div class="formula-block"><div class="equation">c<sub>мет</sub> = <span class="fraction"><span class="top">c<sub>води</sub> · m<sub>води</sub> · (t − t<sub>води</sub>)</span><span class="bottom">m<sub>мет</sub> · (t<sub>мет</sub> − t)</span></span></div><div class="varlist"><span>c<sub>води</sub> = 4200 Дж/(кг·°C)</span><span>m<sub>води</sub> — маса води, кг</span><span>m<sub>мет</sub> — маса металу, кг</span><span>t<sub>води</sub> — початкова температура води</span><span>t<sub>мет</sub> — початкова температура металу</span><span>t — кінцева температура води й металу</span></div></div><div class="table-wrap"><table><tr><th>№</th><th>m<sub>мет</sub>, г</th><th>t<sub>мет</sub>, °C</th><th>m<sub>води</sub>, г</th><th>t<sub>води</sub>, °C</th><th>t, °C</th><th>c<sub>мет</sub>, Дж/(кг·°C)</th></tr>${rows}</table></div>${records[2].map((r,i)=>`<div class="question"><label for="metalAns${i}">Дослід ${i+1}: введи обчислене значення питомої теплоємності</label><input id="metalAns${i}" type="number" placeholder="Наприклад, 385"></div>`).join('')}<button onclick="checkCalc()">Перевірити обчислення</button><div id="calcFeedback"></div>`;
  }
 }
-function checkCalc(){if(current===1){let s=document.querySelector('input[name=calc]:checked');if(!s){$('calcFeedback').innerHTML='<p class="feedback bad">Обери відповідь.</p>';return}if(s.value==='0'){if(!completed.c1){score+=3;missionScore[1]+=3;completed.c1=true;updateScore()}$('calcFeedback').innerHTML='<p class="feedback ok">Правильно! +3 бали. В ідеальній системі Qх = Qг.</p><button onclick="step=3;renderStep()">До висновку</button>'}else $('calcFeedback').innerHTML='<p class="feedback bad">Перевір закон збереження енергії та спробуй ще раз.</p>'}
- else{let good=0;records[2].forEach((r,i)=>{let v=+$('metalAns'+i).value;if(Math.abs(v-r.calc)/r.calc<.08)good++});if(good===3){if(!completed.c2){score+=3;missionScore[2]+=3;completed.c2=true;updateScore()}$('calcFeedback').innerHTML='<p class="feedback ok">Усі три розрахунки правильні! +3 бали. Порівняй значення з табличними: мідь ≈ 385, залізо ≈ 460, алюміній ≈ 900 Дж/(кг·°C).</p><button onclick="step=3;renderStep()">До висновку</button>'}else $('calcFeedback').innerHTML=`<p class="feedback bad">Правильних розрахунків: ${good} із 3. Перевір формулу, одиниці маси та округлення. Можна виправити відповіді.</p>`}}
+function checkCalc(){
+ if(current===1){
+  let sel=document.querySelector('input[name=calc]:checked');
+  if(!sel){$('calcFeedback').innerHTML='<p class="feedback bad">Обери відповідь.</p>';return}
+  const key='water-balance';attempts[key]=(attempts[key]||0)+1;
+  const selected=['рівні','завжди різні','дорівнюють нулю'][Number(sel.value)],correct=sel.value==='0';
+  missionAnswers[1].calculationAnswers=[{question:'У спрощеній моделі Qх і Qг…',selectedAnswer:selected,correctAnswer:'рівні',isCorrect:correct,attempts:attempts[key]}];
+  if(correct){if(!completed.c1){score+=3;missionScore[1]+=3;completed.c1=true;updateScore()}$('calcFeedback').innerHTML='<p class="feedback ok">Правильно! +3 бали. В ідеальній системі Qх = Qг.</p><button onclick="step=3;renderStep()">До висновку</button>'}
+  else $('calcFeedback').innerHTML='<p class="feedback bad">Перевір закон збереження енергії та спробуй ще раз.</p>'
+ }else{
+  let good=0;missionAnswers[2].calculationAnswers=[];
+  records[2].forEach((r,i)=>{
+   const raw=$('metalAns'+i).value,v=Number(raw),correct=raw!==''&&Number.isFinite(v)&&Math.abs(v-r.calc)/r.calc<.08;
+   r.studentAnswer=raw===''?null:v;r.studentCorrect=correct;
+   missionAnswers[2].calculationAnswers.push({question:'Питома теплоємність металу, дослід '+(i+1),selectedAnswer:raw,correctAnswer:r.calc.toFixed(0),isCorrect:correct,attempts:1});
+   if(correct)good++;
+  });
+  if(good===3){if(!completed.c2){score+=3;missionScore[2]+=3;completed.c2=true;updateScore()}$('calcFeedback').innerHTML='<p class="feedback ok">Усі три розрахунки правильні! +3 бали. Порівняй значення з табличними: мідь ≈ 385, залізо ≈ 460, алюміній ≈ 900 Дж/(кг·°C).</p><button onclick="step=3;renderStep()">До висновку</button>'}
+  else $('calcFeedback').innerHTML=`<p class="feedback bad">Правильних розрахунків: ${good} із 3. Перевір формулу, одиниці маси та округлення. Можна виправити відповіді.</p>`
+ }
+}
 function conclusion(){
  let prompt=current===1?'Чому в реальному досліді Q гарячої води може бути трохи більшим за Q холодної?':'Назви щонайменше один чинник, який впливає на точність визначення питомої теплоємності металу.';
  $('missionContent').innerHTML=`<h3>Етап 4. Висновок дослідника</h3><p>${current===1?'Порівняй теплоту, віддану гарячою водою, з теплотою, отриманою холодною.':'Зазнач, яку фізичну величину визначали та як можна пояснити відхилення від табличного значення.'}</p><label for="conclusionText">${prompt}</label><textarea id="conclusionText" rows="4" placeholder="Напиши висновок своїми словами..."></textarea><div class="question"><b>Контрольне запитання</b><p>${current===1?'Яка причина можливої розбіжності результатів у реальному калориметрі?':'Які теплові втрати не враховані у спрощеному методі?'}</p><div class="answers">${(current===1?['Частина теплоти нагріває калориметр і втрачається в довкілля','Вода змінює свою масу вдвічі','Питома теплоємність води дорівнює нулю']:['Теплота передається калориметру та навколишньому середовищу','Маса металу стає нульовою','Вода не бере участі в теплообміні']).map((x,i)=>`<label class="answer"><input type="radio" name="conq" value="${i}">${x}</label>`).join('')}</div></div><button onclick="checkConclusion()">Завершити місію</button><div id="conFeedback"></div>`;
 }
-function checkConclusion(){let textval=$('conclusionText').value.trim(),ans=document.querySelector('input[name=conq]:checked');if(textval.length<20||!ans){$('conFeedback').innerHTML='<p class="feedback bad">Напиши розгорнутий висновок і дай відповідь на контрольне запитання.</p>';return}if(ans.value==='0'){if(!completed['con'+current]){score+=3;missionScore[current]+=3;completed['con'+current]=true;updateScore()}$('conFeedback').innerHTML='<p class="feedback ok">Висновок прийнято! +3 бали.</p><button onclick="step=4;renderStep()">Отримати звіт місії</button>'}else $('conFeedback').innerHTML='<p class="feedback bad">Подумай, куди може передаватися теплота, крім води або металу.</p>'}
-function finishMission(){completed['mission'+current]=true;updateScore();$('missionContent').innerHTML=`<div class="result">Місію виконано!</div><p>Ти відновив(ла) результати експерименту та пройшов(ла) всі етапи.</p><div class="statgrid"><div class="stat">Місія<b>${current===1?'Тепловий баланс':'Питома теплоємність'}</b></div><div class="stat">Результат цієї місії<b>${missionScore[current]} / 12</b></div><div class="stat">Статус<b>Завершено</b></div></div><div class="actions"><button onclick="backHub()">До вибору місій</button><button class="secondary" onclick="showReport()">Переглянути звіт</button></div>`}
+function checkConclusion(){
+ let textval=$('conclusionText').value.trim(),ans=document.querySelector('input[name=conq]:checked');
+ if(textval.length<20||!ans){$('conFeedback').innerHTML='<p class="feedback bad">Напиши розгорнутий висновок і дай відповідь на контрольне запитання.</p>';return}
+ const options=current===1?['Частина теплоти нагріває калориметр і втрачається в довкілля','Вода змінює свою масу вдвічі','Питома теплоємність води дорівнює нулю']:['Теплота передається калориметру та навколишньому середовищу','Маса металу стає нульовою','Вода не бере участі в теплообміні'];
+ const selected=Number(ans.value),correct=selected===0;
+ missionAnswers[current].conclusion=textval;
+ missionAnswers[current].controlAnswer=options[selected];
+ missionAnswers[current].controlCorrect=correct;
+ missionAnswers[current].controlAttempts=(missionAnswers[current].controlAttempts||0)+1;
+ if(correct){if(!completed['con'+current]){score+=3;missionScore[current]+=3;completed['con'+current]=true;updateScore()}$('conFeedback').innerHTML='<p class="feedback ok">Висновок прийнято! +3 бали.</p><button onclick="step=4;renderStep()">Отримати звіт місії</button>'}
+ else $('conFeedback').innerHTML='<p class="feedback bad">Подумай, куди може передаватися теплота, крім води або металу.</p>'
+}
+function finishMission(){
+ completed['mission'+current]=true;updateScore();
+ $('missionContent').innerHTML=`<div class="result">Місію виконано!</div><p>Ти відновив(ла) результати експерименту та пройшов(ла) всі етапи.</p><div class="statgrid"><div class="stat">Місія<b>${current===1?'Тепловий баланс':'Питома теплоємність'}</b></div><div class="stat">Результат цієї місії<b>${missionScore[current]} / 12</b></div><div class="stat">Статус<b>Завершено</b></div></div><div id="sheetSaveStatus"></div><div class="actions"><button onclick="backHub()">До вибору місій</button><button class="secondary" onclick="showReport()">Переглянути звіт</button></div>`;
+ saveMissionToGoogleSheets();
+}
+function buildMissionPayload(){
+ const answers=missionAnswers[current];
+ return {
+  source:'thermo-lab',schemaVersion:1,
+  submissionId:sessionId+'-mission-'+current,
+  submittedAt:new Date().toISOString(),
+  student:{name:student,className:klass},
+  mission:{
+   id:current,title:current===1?'Тепловий баланс — змішування води':'Визначення питомої теплоємності металів',
+   score:missionScore[current],maxScore:12,status:'completed',
+   theoryAnswers:answers.theoryAnswers,
+   calculationAnswers:answers.calculationAnswers,
+   experiments:records[current],
+   conclusion:answers.conclusion,
+   controlAnswer:answers.controlAnswer,
+   controlCorrect:answers.controlCorrect,
+   controlAttempts:answers.controlAttempts||0,
+   attempts:attempts
+  }
+ };
+}
+async function submitMissionToGoogleSheets(){
+ const payload=buildMissionPayload(),slot=String(current);
+ if(!GOOGLE_SHEETS_WEB_APP_URL||!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(GOOGLE_SHEETS_WEB_APP_URL)){
+  sheetsSubmissionState[slot]='not-configured';return {ok:false,reason:'not-configured'}
+ }
+ try{
+  await fetch(GOOGLE_SHEETS_WEB_APP_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
+  sheetsSubmissionState[slot]='sent';return {ok:true}
+ }catch(error){
+  sheetsSubmissionState[slot]='error';return {ok:false,reason:String(error)}
+ }
+}
+function renderSheetsStatus(){
+ const el=$('sheetSaveStatus');if(!el)return;
+ const state=sheetsSubmissionState[String(current)];
+ if(state==='not-configured'){
+  el.innerHTML='<div class="feedback">Google Sheets ще не підключено. Результат збережено в поточному звіті, але не надіслано до таблиці.</div>';
+ }else if(state==='sending'){
+  el.innerHTML='<div class="feedback">Надсилаю результати до Google Sheets…</div>';
+ }else if(state==='sent'){
+  el.innerHTML='<div class="feedback ok">Запит на збереження надіслано. Через обмеження доступу браузера перевір наявність нового рядка у Google Sheets.</div>';
+ }else if(state==='error'){
+  el.innerHTML='<div class="feedback bad">Не вдалося надіслати дані. Перевір інтернет-з’єднання та URL Apps Script.</div><button class="secondary" onclick="retryGoogleSheets()">Повторити надсилання</button>';
+ }
+}
+async function retryGoogleSheets(){
+ const slot=String(current);sheetsSubmissionState[slot]='sending';renderSheetsStatus();
+ await submitMissionToGoogleSheets();renderSheetsStatus();
+}
+async function saveMissionToGoogleSheets(){
+ const slot=String(current);
+ if(sheetsSubmissionState[slot]==='sent'||sheetsSubmissionState[slot]==='sending')return;
+ sheetsSubmissionState[slot]='sending';renderSheetsStatus();
+ await submitMissionToGoogleSheets();renderSheetsStatus();
+}
 function showReport(){hideAll();$('report').classList.remove('hidden');let lines=[`Дослідник: ${student}`,`Клас: ${klass||'не вказано'}`,`Балів загалом: ${score} / 24`,`Оцінка за місію 1: ${missionScore[1]} / 12`,`Оцінка за місію 2: ${missionScore[2]} / 12`,`Місія 1: ${completed.mission1?'завершена':'не завершена'}`,`Місія 2: ${completed.mission2?'завершена':'не завершена'}`];if(records[1].length)lines.push('Досліди зі змішування води: '+records[1].length);if(records[2].length)lines.push('Досліди з металами: '+records[2].length);reportText=lines.join('\\n');$('reportContent').innerHTML=`<p><b>${student}</b> ${klass?'· '+klass:''}</p><div class="statgrid"><div class="stat">Набрано балів<b>${score}</b></div><div class="stat">Максимум<b>24</b></div><div class="stat">Оцінки за місії<b>${missionScore[1]} / 12 · ${missionScore[2]} / 12</b></div></div><h3>Виконані експерименти</h3><p>Змішування води: ${records[1].length} досліди.</p><p>Визначення теплоємності металів: ${records[2].length} досліди.</p><p class="muted small">Звіт можна надрукувати або зберегти як PDF через меню друку браузера.</p>`}
 function copyReport(){navigator.clipboard?.writeText(reportText).then(()=>alert('Звіт скопійовано.')).catch(()=>alert('Скопіюй текст зі звіту вручну.'))}
 </script>
