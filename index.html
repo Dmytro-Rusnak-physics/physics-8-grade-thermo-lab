@@ -115,7 +115,7 @@ function gradeQuestionAttempt(key,section,question,selectedAnswer,correctAnswer,
 }
 function questionFeedback(state,explanation=''){
  if(state.isCorrect){
-  return '<div class="feedback ok">Правильно! '+(state.attempts===1?'Перша спроба: +1 бал.':'Друга спроба: +0,5 бала.')+(explanation?' '+escapeHTML(explanation):'')+'</div>';
+  return '<div class="feedback ok">Правильно! '+(state.attempts===1?'Перша спроба: +1 бал.':'Друга спроба: +0,5 бала.')+' Правильна відповідь: <b>'+escapeHTML(state.correctAnswer)+'</b>.'+(explanation?' '+escapeHTML(explanation):'')+'</div>';
  }
  if(state.complete){
   return '<div class="feedback bad">Використано 2 спроби. Бал за питання — 0. Правильна відповідь: <b>'+escapeHTML(state.correctAnswer)+'</b>.'+(explanation?' '+escapeHTML(explanation):'')+'</div>';
@@ -194,7 +194,7 @@ function runWater(){
  if(th<=tc){$('expResult').innerHTML='<p class="feedback bad">Температура гарячої води має бути вищою за температуру холодної.</p>';return}
  let t=(mc*tc+mh*th)/(mc+mh),qc=Cw*mc*(t-tc),qh=Cw*mh*(th-t);
  records[1].push({mc:mc*1000,mh:mh*1000,tc,th,t,qc,qh});score+=1;missionScore[1]+=1;updateScore();lockExperimentInputs();
- $('expResult').innerHTML=`<div class="feedback ok"><b>Дослід ${trial+1} завершено!</b><div class="statgrid"><div class="stat">Температура суміші<b>${t.toFixed(1)} °C</b></div><div class="stat">Q<sub>х</sub> — одержана теплота<b>${qc.toFixed(0)} Дж</b></div><div class="stat">Q<sub>г</sub> — віддана теплота<b>${qh.toFixed(0)} Дж</b></div></div><p class="small">Це результат лише поточного досліду. Наступний дослід матиме інші початкові параметри.</p></div>`;
+ $('expResult').innerHTML=`<div class="feedback ok"><b>Дослід ${trial+1} завершено!</b><div class="statgrid"><div class="stat">Температура суміші<b>${t.toFixed(1)} °C</b></div></div><p class="small">Це результат лише поточного досліду. Наступний дослід матиме інші початкові параметри.</p></div>`;
  if(trial+1>=3){completed.exp1=true;$('expNext').innerHTML='<button onclick="step=2;renderStep()">До опрацювання результатів</button>'}
  else $('expNext').innerHTML=`<button onclick="experiment()">Перейти до досліду ${trial+2} (нові параметри)</button>`;
 }
@@ -214,7 +214,7 @@ function calculations(){
  if(current===1){
   if(records[1].length<3){step=1;renderStep();return}
   const r=records[1][0];
-  let rows=records[1].map((x,i)=>`<tr><td>${i+1}</td><td>${x.mc}</td><td>${x.tc}</td><td>${x.mh}</td><td>${x.th}</td><td>${x.t.toFixed(1)}</td><td>${x.qc.toFixed(0)}</td><td>${x.qh.toFixed(0)}</td></tr>`).join('');
+  let rows=records[1].map((x,i)=>`<tr><td>${i+1}</td><td>${x.mc}</td><td>${x.tc}</td><td>${x.mh}</td><td>${x.th}</td><td>${x.t.toFixed(1)}</td><td>—</td><td>—</td></tr>`).join('');
   $('missionContent').innerHTML=`<h3>Етап 3. Опрацювання результатів</h3><p>Скористайся формулами й результатами першого досліду. Уведи обидва значення кількості теплоти та обери правильне співвідношення. Кожне завдання оцінюється окремо.</p><p class="muted small">На кожне питання є 2 спроби: 1 бал за першу правильну відповідь, 0,5 бала за другу. Після двох помилок з’явиться правильна відповідь, бал — 0.</p>
    <div class="formula-block"><div class="equation">Q<sub>х</sub> = c<sub>води</sub> · m<sub>х</sub> · (t − t<sub>х</sub>)</div><div class="equation">Q<sub>г</sub> = c<sub>води</sub> · m<sub>г</sub> · (t<sub>г</sub> − t)</div><p class="formula-note">Маси підставляй у кілограмах: грами поділи на 1000. Відповіді округлюй до цілих джоулів.</p></div>
    <div class="table-wrap"><table><tr><th>№</th><th>m<sub>х</sub>, г</th><th>t<sub>х</sub>, °C</th><th>m<sub>г</sub>, г</th><th>t<sub>г</sub>, °C</th><th>t, °C</th><th>Q<sub>х</sub>, Дж</th><th>Q<sub>г</sub>, Дж</th></tr>${rows}</table></div>
